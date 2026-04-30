@@ -15,7 +15,7 @@ OPENCV_LIBS_MAIN = -L/usr/local/opencv3.4/lib \
               -lopencv_core \
               -Wl,-rpath,/usr/local/opencv3.4/lib
 
-PTHREADFLAGS = -pthread
+
 
 
 MAIN_PATH = src/main.c
@@ -34,11 +34,11 @@ test: $(BUILD_DIR)/$(NAME_TEST)
 
 $(BUILD_DIR)/$(NAME): $(MAIN_PATH) $(FILTER_PATH)
 	mkdir -p $(BUILD_DIR)
-	$(CC) $(MAIN_PATH) $(FILTER_PATH) $(CFLAGS) $(INCLUDES) $(OPENCV_LIBS_MAIN) $(PTHREADFLAGS)  -o $@
+	$(CC) $(MAIN_PATH) $(FILTER_PATH) $(CFLAGS) $(INCLUDES) $(OPENCV_LIBS_MAIN)   -o $@
 
 $(BUILD_DIR)/$(NAME_TEST): $(TEST_PATH) $(FILTER_PATH)
 	mkdir -p $(BUILD_DIR)
-	$(CC) $(TEST_PATH) $(FILTER_PATH) $(CFLAGS) $(INCLUDES) $(OPENCV_LIBS_TEST) $(PTHREADFLAGS)  -o $@
+	$(CC) $(TEST_PATH) $(FILTER_PATH) $(CFLAGS) $(INCLUDES) $(OPENCV_LIBS_TEST)   -o $@
 
 clean:
 	rm -rf $(BUILD_DIR)
