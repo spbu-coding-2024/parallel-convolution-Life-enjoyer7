@@ -31,7 +31,7 @@ OPENCV_LIB_PATH = /usr/local/opencv3.4/lib
 # Основная программа (конвейерная обработка)
 build: $(BUILD_DIR)/$(NAME)
 
-# Тесты (используют pipeline, queue, job, utils для тестирования конвейера)
+# Тесты (используют pipeline)
 test: $(BUILD_DIR)/$(NAME_TEST)
 	export LD_LIBRARY_PATH=$(OPENCV_LIB_PATH):$$LD_LIBRARY_PATH && $(BUILD_DIR)/$(NAME_TEST)
 

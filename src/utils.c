@@ -91,19 +91,3 @@ int imagesEqual(const IplImage *a, const IplImage *b)
     }
     return 1;
 }
-
-void print_usage(const char *prog_name)
-{
-    printf("Usage: %s [OPTIONS]\n", prog_name);
-    printf("\n");
-    printf("Options:\n");
-    printf("  -f, --filter NUM      Filter ID (0-14)\n");
-    printf("  -t, --tactic NUM      Strategy ID (0-5)\n");
-    printf("  -i, --input DIR       Input directory with images\n");
-    printf("  -o, --output DIR      Output directory for results\n");
-    printf("  -w, --workers NUM     Number of worker threads (default: 4)\n");
-    printf("  -h, --help            Show this help\n");
-    printf("\n");
-    printf("Example:\n");
-    printf("  %s -f 2 -t 1 -i images/ -o results/ -w 4\n", prog_name);
-}

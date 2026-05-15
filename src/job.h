@@ -1,4 +1,3 @@
-// job.h
 #ifndef JOB_H
 #define JOB_H
 

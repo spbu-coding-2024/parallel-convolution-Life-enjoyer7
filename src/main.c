@@ -12,17 +12,17 @@
 #define CV_LOAD_IMAGE_COLOR 1
 #endif
 
-#define NUM_FILTERS 15
+#define NUM_FILTERS 27
 #define MAX_IMAGES 1000
 
-// Глобальный массив фильтров (чтобы не создавать каждый раз)
+// Глобальный массив фильтров
 Filter filters[NUM_FILTERS];
 
 int main(int argc, char *argv[])
 {
     int filter_id = -1;
     int strategy_id = -1;
-    int num_workers = 4; // по умолчанию
+    int num_workers = 4;
     const char *input_dir = NULL;
     const char *output_dir = NULL;
 
@@ -59,19 +59,13 @@ int main(int argc, char *argv[])
         case 'w':
             num_workers = atoi(optarg);
             break;
-        case 'h':
-            print_usage(argv[0]);
-            return 0;
-        default:
-            print_usage(argv[0]);
-            return 1;
         }
     }
 
     // Проверка обязательных параметров
     if (filter_id < 0 || filter_id >= NUM_FILTERS)
     {
-        printf("Error: Invalid filter ID (0-14)\n");
+        printf("Error: Invalid filter ID (0-27)\n");
         return 1;
     }
 

@@ -14,9 +14,6 @@ int get_image_files(const char *dir_path, const char ***out_paths);
 void generate_output_paths(const char **input_paths, const char **output_paths,
                            int num_images, const char *output_dir);
 
-// Показать справку по использованию программы
-void print_usage(const char *prog_name);
-
 int imagesEqual(const IplImage *a, const IplImage *b);
 
 #endif
