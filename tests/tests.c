@@ -591,9 +591,9 @@ void testZeroFilter(void)
 
 int main(void)
 {
-    // testIdentityFilter();
+    testIdentityFilter();
     testShiftComposition();
-    //  testZeroPadding();
-    // testZeroFilter();
+    testZeroPadding();
+    testZeroFilter();
     return 0;
 }
