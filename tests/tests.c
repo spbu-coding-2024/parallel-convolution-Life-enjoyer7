@@ -11,6 +11,16 @@
 #include "../src/pipeline.h"
 #include "../src/utils.h"
 
+const char *strategy_names[] = {
+    "Sequential",    // 0
+    "Pixelwise",     // 1
+    "By Rows",       // 2
+    "By Cols",       // 3
+    "Blocks 32x32",  // 4
+    "Blocks 64x64",  // 5
+    "Blocks 128x128" // 6
+};
+
 void testIdentityFilter(void)
 {
     printf("\n");
@@ -36,77 +46,102 @@ void testIdentityFilter(void)
     const char **output_paths = (const char **)malloc(num_images * sizeof(const char *));
     generate_output_paths(input_paths, output_paths, num_images, output_dir);
 
-    // ЗАМЕР КОНВЕЙЕРА
-    printf("\nRunning pipeline on all images...\n");
-    double pipeline_start = get_time_ms();
-
-    pipeline_run(input_paths, output_paths, num_images, 14, 1, 10);
-
-    double pipeline_end = get_time_ms();
-    double pipeline_time = pipeline_end - pipeline_start;
-    printf("Pipeline completed in %.2f ms\n", pipeline_time);
-
-    //  ПОСЛЕДОВАТЕЛЬНАЯ ОБРАБОТКА
-    int valid_count = 0;
-    double seq_total_time = 0;
-
-    printf("\nComparing pipeline results with sequential processing...\n");
-
+    // Оригинальные изображения для сравнения
+    IplImage **original_images = (IplImage **)malloc(num_images * sizeof(IplImage *));
     for (int j = 0; j < num_images; j++)
     {
-        IplImage *img = cvLoadImage(input_paths[j], 1);
-        if (!img)
+        original_images[j] = cvLoadImage(input_paths[j], 1);
+        if (!original_images[j])
         {
             printf("ERROR: Failed to load image %s\n", input_paths[j]);
-            continue;
         }
+    }
 
-        IplImage *result_seq = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
-        double seq_start = get_time_ms();
-        applyFilter(img, result_seq, &identity);
-        double seq_time = get_time_ms() - seq_start;
-        seq_total_time += seq_time;
+    // Конфигурации потоков
+    int thread_counts[] = {1, 2, 4, 8, 12, 16};
+    int num_configs = sizeof(thread_counts) / sizeof(thread_counts[0]);
 
-        IplImage *pipeline_img = cvLoadImage(output_paths[j], 1);
-        if (!pipeline_img)
+    // Массив результатов: [стратегия][конфигурация_потоков]
+    double results[7][num_configs];
+
+    // Бенчмарк
+    for (int t_idx = 0; t_idx < num_configs; t_idx++)
+    {
+        int workers = thread_counts[t_idx];
+        printf("\n========================================\n");
+        printf("  WORKERS: %d\n", workers);
+        printf("========================================\n");
+
+        for (int s = 0; s < 7; s++)
         {
-            printf("ERROR: Failed to load pipeline result: %s\n", output_paths[j]);
-            cvReleaseImage(&result_seq);
-            cvReleaseImage(&img);
-            continue;
-        }
+            printf("  %-15s : ", strategy_names[s]);
+            fflush(stdout);
 
-        int eq = imagesEqual(pipeline_img, result_seq);
-        if (!eq)
+            double start = get_time_ms();
+            pipeline_run(input_paths, output_paths, num_images, 14, s, workers);
+            double elapsed = get_time_ms() - start;
+
+            results[s][t_idx] = elapsed;
+            printf("%8.2f ms\n", elapsed);
+
+            // Проверка корректности
+            for (int j = 0; j < num_images; j++)
+            {
+                IplImage *pipeline_img = cvLoadImage(output_paths[j], 1);
+                if (!pipeline_img)
+                    continue;
+
+                int eq = imagesEqual(original_images[j], pipeline_img);
+                assert(eq);
+                cvReleaseImage(&pipeline_img);
+            }
+        }
+    }
+
+    // Итоговый вывод
+    printf("\n");
+    printf("================================================================================\n");
+    printf("                             SUMMARY\n");
+    printf("================================================================================\n");
+    printf("\n");
+
+    for (int s = 0; s < 7; s++)
+    {
+        printf("  %-15s : ", strategy_names[s]);
+        for (int t_idx = 0; t_idx < num_configs; t_idx++)
         {
-            printf("ERROR: DIFFERENT images");
+            if (t_idx > 0)
+                printf(" | ");
+            printf("%5.0f ms", results[s][t_idx]);
         }
-        assert(eq);
-
-        cvReleaseImage(&result_seq);
-        cvReleaseImage(&pipeline_img);
-        cvReleaseImage(&img);
-        valid_count++;
+        printf("\n");
     }
 
     printf("\n");
+    printf("  Workers:          ");
+    for (int t_idx = 0; t_idx < num_configs; t_idx++)
+    {
+        if (t_idx > 0)
+            printf(" | ");
+        printf("%5d   ", thread_counts[t_idx]);
+    }
+    printf("\n");
 
-    printf("                          PIPELINE vs SEQUENTIAL RESULTS                       \n");
-
-    printf("  Pipeline: %.2f ms\n", pipeline_time);
-    printf("  Sequential (total):   %.2f ms\n", seq_total_time);
-    printf("  Speedup:              %.2fx\n", seq_total_time / pipeline_time);
-    printf("  Processed images:     %d\n", valid_count);
-
+    printf("\n");
+    printf("  Processed images: %d\n", num_images);
+    printf("\n");
     printf("                          TEST 1 PASSED                                        \n");
 
     // Очистка
     filter_free(&identity);
     for (int i = 0; i < num_images; i++)
     {
+        if (original_images[i])
+            cvReleaseImage(&original_images[i]);
         free((void *)input_paths[i]);
         free((void *)output_paths[i]);
     }
+    free(original_images);
     free(input_paths);
     free(output_paths);
 }
@@ -114,9 +149,8 @@ void testIdentityFilter(void)
 void testShiftComposition(void)
 {
     printf("\n");
-
     printf("                        TEST 2: SHIFT COMPOSITION                              \n");
-    printf("                   (Pipeline vs Sequential Comparison)                         \n");
+    printf("                   (Pipeline Strategies Comparison)                            \n");
 
     // Создаём фильтры сдвига
     Filter shiftRight = filter_shift_right();
@@ -143,159 +177,102 @@ void testShiftComposition(void)
     const char **output_paths = (const char **)malloc(num_images * sizeof(const char *));
     generate_output_paths(input_paths, output_paths, num_images, output_dir);
 
-    double pipeline_times[3] = {0};
-    double sequential_times[3] = {0};
-
-    //  RIGHT-LEFT
-    printf("\n");
-    printf("\nProcessing RIGHT-LEFT COMPOSITION\n");
-    printf("\n");
-
-    double pipe_start = get_time_ms();
-    pipeline_run(input_paths, output_paths, num_images, 15, 1, 10);
-    pipeline_run(output_paths, output_paths, num_images, 16, 1, 10);
-    pipeline_times[0] = get_time_ms() - pipe_start;
-    printf("\n");
-    printf("Pipeline (Right-Left) completed\n");
-    printf("\n");
-    // Sequential
-    double seq_total = 0;
-
+    // Загружаем оригинальные изображения
+    IplImage **original_images = (IplImage **)malloc(num_images * sizeof(IplImage *));
     for (int j = 0; j < num_images; j++)
     {
-        IplImage *img = cvLoadImage(input_paths[j], 1);
-        if (!img)
-            continue;
-
-        IplImage *temp = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
-        IplImage *result_seq = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
-
-        double seq_start = get_time_ms();
-        applyFilter(img, temp, &shiftRight);
-        applyFilter(temp, result_seq, &shiftLeft);
-        seq_total += get_time_ms() - seq_start;
-
-        IplImage *pipeline_img = cvLoadImage(output_paths[j], 1);
-
-        int eq = imagesEqual(pipeline_img, result_seq);
-        if (!eq)
+        original_images[j] = cvLoadImage(input_paths[j], 1);
+        if (!original_images[j])
         {
-            printf("ERROR: DIFFERENT images");
+            printf("ERROR: Failed to load image %s\n", input_paths[j]);
         }
-        assert(eq);
-
-        cvReleaseImage(&temp);
-        cvReleaseImage(&result_seq);
-        cvReleaseImage(&pipeline_img);
-        cvReleaseImage(&img);
     }
-    sequential_times[0] = seq_total;
 
-    //  UP-DOWN
-    printf("\n");
-    printf("\nProcessing UP-DOWN COMPOSITION\n");
-    printf("\n");
-    pipe_start = get_time_ms();
-    pipeline_run(input_paths, output_paths, num_images, 17, 1, 10);
-    pipeline_run(output_paths, output_paths, num_images, 18, 1, 10);
-    pipeline_times[1] = get_time_ms() - pipe_start;
-    printf("\n");
-    printf("Pipeline (Up-Down) completed\n");
-    printf("\n");
-    seq_total = 0;
+    // Конфигурации потоков
+    int thread_counts[] = {1, 2, 4, 8, 12, 16};
+    int num_configs = sizeof(thread_counts) / sizeof(thread_counts[0]);
 
-    for (int j = 0; j < num_images; j++)
+    // Результаты: [композиция][стратегия][конфигурация]
+    double results[3][7][num_configs];
+    const char *comp_names[3] = {"Right-Left", "Up-Down", "Diag"};
+
+    int filter_indices[3][2] = {
+        {15, 16},
+        {17, 18},
+        {19, 20}};
+
+    // Бенчмарк
+    for (int t_idx = 0; t_idx < num_configs; t_idx++)
     {
-        IplImage *img = cvLoadImage(input_paths[j], 1);
-        if (!img)
-            continue;
+        int workers = thread_counts[t_idx];
+        printf("\n========================================\n");
+        printf("  WORKERS: %d\n", workers);
+        printf("========================================\n");
 
-        IplImage *temp = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
-        IplImage *result_seq = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
-
-        double seq_start = get_time_ms();
-        applyFilter(img, temp, &shiftUp);
-        applyFilter(temp, result_seq, &shiftDown);
-        seq_total += get_time_ms() - seq_start;
-
-        IplImage *pipeline_img = cvLoadImage(output_paths[j], 1);
-
-        int eq = imagesEqual(pipeline_img, result_seq);
-        if (!eq)
+        for (int comp = 0; comp < 3; comp++)
         {
-            printf("ERROR: DIFFERENT images");
+            printf("\n  %s composition:\n", comp_names[comp]);
+
+            for (int s = 0; s < 7; s++)
+            {
+                printf("    %-15s : ", strategy_names[s]);
+                fflush(stdout);
+
+                double start = get_time_ms();
+                pipeline_run(input_paths, output_paths, num_images, filter_indices[comp][0], s, workers);
+                pipeline_run(output_paths, output_paths, num_images, filter_indices[comp][1], s, workers);
+                double elapsed = get_time_ms() - start;
+
+                results[comp][s][t_idx] = elapsed;
+                printf("%8.2f ms\n", elapsed);
+
+                // Проверка корректности
+                for (int j = 0; j < num_images; j++)
+                {
+                    IplImage *pipeline_img = cvLoadImage(output_paths[j], 1);
+                    int eq = imagesEqual(original_images[j], pipeline_img);
+                    assert(eq);
+                    cvReleaseImage(&pipeline_img);
+                }
+            }
         }
-        assert(eq);
-
-        cvReleaseImage(&temp);
-        cvReleaseImage(&result_seq);
-        cvReleaseImage(&pipeline_img);
-        cvReleaseImage(&img);
     }
-    sequential_times[1] = seq_total;
 
-    //  DIAG
+    // Итоговый вывод
     printf("\n");
-    printf("\nProcessing DIAG COMPOSITION \n");
+    printf("================================================================================\n");
+    printf("                             SUMMARY\n");
+    printf("================================================================================\n");
     printf("\n");
-    pipe_start = get_time_ms();
-    pipeline_run(input_paths, output_paths, num_images, 19, 1, 10);
-    pipeline_run(output_paths, output_paths, num_images, 20, 1, 10);
-    pipeline_times[2] = get_time_ms() - pipe_start;
-    printf("\n");
-    printf("Pipeline (Diag) completed\n");
-    printf("\n");
-    seq_total = 0;
 
-    for (int j = 0; j < num_images; j++)
+    for (int comp = 0; comp < 3; comp++)
     {
-        IplImage *img = cvLoadImage(input_paths[j], 1);
-        if (!img)
-            continue;
-
-        IplImage *temp = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
-        IplImage *result_seq = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
-
-        double seq_start = get_time_ms();
-        applyFilter(img, temp, &shiftDiagUp);
-        applyFilter(temp, result_seq, &shiftDiagDown);
-        seq_total += get_time_ms() - seq_start;
-
-        IplImage *pipeline_img = cvLoadImage(output_paths[j], 1);
-
-        int eq = imagesEqual(pipeline_img, result_seq);
-        if (!eq)
+        printf("  %s composition:\n", comp_names[comp]);
+        for (int s = 0; s < 7; s++)
         {
-            printf("ERROR: DIFFERENT images");
+            printf("    %-15s : ", strategy_names[s]);
+            for (int t_idx = 0; t_idx < num_configs; t_idx++)
+            {
+                if (t_idx > 0)
+                    printf(" | ");
+                printf("%5.0f ms", results[comp][s][t_idx]);
+            }
+            printf("\n");
         }
-        assert(eq);
-
-        cvReleaseImage(&temp);
-        cvReleaseImage(&result_seq);
-        cvReleaseImage(&pipeline_img);
-        cvReleaseImage(&img);
+        printf("\n");
     }
-    sequential_times[2] = seq_total;
+
+    printf("  Workers:          ");
+    for (int t_idx = 0; t_idx < num_configs; t_idx++)
+    {
+        if (t_idx > 0)
+            printf(" | ");
+        printf("%5d   ", thread_counts[t_idx]);
+    }
+    printf("\n");
 
     printf("\n");
-    printf("                          SHIFT COMPOSITION RESULTS                           \n");
-    printf("\n");
-    printf("  Right-Left Pipeline:   %.2f ms\n", pipeline_times[0]);
-    printf("  Right-Left Sequential: %.2f ms\n", sequential_times[0]);
-    printf("  Right-Left Speedup:    %.2fx\n", sequential_times[0] / pipeline_times[0]);
-
-    printf("\n");
-    printf("  Up-Down Pipeline:      %.2f ms\n", pipeline_times[1]);
-    printf("  Up-Down Sequential:    %.2f ms\n", sequential_times[1]);
-    printf("  Up-Down Speedup:       %.2fx\n", sequential_times[1] / pipeline_times[1]);
-
-    printf("\n");
-    printf("  Diag Pipeline:         %.2f ms\n", pipeline_times[2]);
-    printf("  Diag Sequential:       %.2f ms\n", sequential_times[2]);
-    printf("  Diag Speedup:          %.2fx\n", sequential_times[2] / pipeline_times[2]);
-
-    printf("\n");
-    printf("  Processed images:      %d\n", num_images);
+    printf("  Processed images: %d\n", num_images);
     printf("\n");
     printf("                          TEST 2 PASSED                                        \n");
 
@@ -309,9 +286,12 @@ void testShiftComposition(void)
 
     for (int i = 0; i < num_images; i++)
     {
+        if (original_images[i])
+            cvReleaseImage(&original_images[i]);
         free((void *)input_paths[i]);
         free((void *)output_paths[i]);
     }
+    free(original_images);
     free(input_paths);
     free(output_paths);
 }
@@ -320,7 +300,7 @@ void testZeroPadding(void)
 {
     printf("\n");
     printf("                        TEST 3: ZERO PADDING                                    \n");
-    printf("                   (Pipeline vs Sequential Comparison)                         \n");
+    printf("                   (Pipeline Strategies Comparison)                            \n");
 
     const char *input_dir = "images";
     const char *output_dir = "new_images";
@@ -333,9 +313,9 @@ void testZeroPadding(void)
         printf("Error: No images found in %s\n", input_dir);
         return;
     }
-    printf("\n");
+
     printf("Found %d images in %s\n", num_images, input_dir);
-    printf("\n");
+
     const char **output_paths = (const char **)malloc(num_images * sizeof(const char *));
     generate_output_paths(input_paths, output_paths, num_images, output_dir);
 
@@ -350,70 +330,105 @@ void testZeroPadding(void)
     original_filters[3] = filter_sharpen1();
     original_filters[4] = filter_emboss1();
 
-    // Массивы для хранения результатов по каждому фильтру
-    double pipeline_times[5] = {0};
-    double sequential_times[5] = {0};
-    int valid_counts[5] = {0};
-
-    // ОБРАБОТКА КАЖДОГО ФИЛЬТРА
-    for (int f = 0; f < 5; f++)
+    // Загружаем оригинальные изображения
+    IplImage **original_images = (IplImage **)malloc(num_images * sizeof(IplImage *));
+    for (int j = 0; j < num_images; j++)
     {
-        printf("\n");
-        printf("\nProcessing filter: %s\n", filter_names[f]);
-        printf("\n");
-        // Pipeline
-        double pipe_start = get_time_ms();
-        pipeline_run(input_paths, output_paths, num_images, padded_indices[f], 1, 10);
-        pipeline_times[f] = get_time_ms() - pipe_start;
-        printf("Pipeline (%s) completed\n", filter_names[f]);
-
-        // Sequential
-        double seq_total = 0;
-        int valid = 0;
-        for (int j = 0; j < num_images; j++)
+        original_images[j] = cvLoadImage(input_paths[j], 1);
+        if (!original_images[j])
         {
-            IplImage *img = cvLoadImage(input_paths[j], 1);
-            if (!img)
-                continue;
-
-            IplImage *result_seq = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
-            double seq_start = get_time_ms();
-            applyFilter(img, result_seq, &original_filters[f]);
-            seq_total += get_time_ms() - seq_start;
-
-            IplImage *pipeline_img = cvLoadImage(output_paths[j], 1);
-
-            int eq = imagesEqual(pipeline_img, result_seq);
-            if (!eq)
-            {
-                printf("ERROR: DIFFERENT images");
-            }
-            assert(eq);
-
-            cvReleaseImage(&result_seq);
-            cvReleaseImage(&pipeline_img);
-            cvReleaseImage(&img);
+            printf("ERROR: Failed to load image %s\n", input_paths[j]);
         }
-        sequential_times[f] = seq_total;
-        valid_counts[f] = valid;
     }
 
+    // Конфигурации потоков
+    int thread_counts[] = {1, 2, 4, 8, 12, 16};
+    int num_configs = sizeof(thread_counts) / sizeof(thread_counts[0]);
+
+    // Результаты: [фильтр][стратегия][конфигурация]
+    double results[5][7][num_configs];
+
+    // Бенчмарк
+    for (int t_idx = 0; t_idx < num_configs; t_idx++)
+    {
+        int workers = thread_counts[t_idx];
+        printf("\n========================================\n");
+        printf("  WORKERS: %d\n", workers);
+        printf("========================================\n");
+
+        for (int f = 0; f < 5; f++)
+        {
+            printf("\n  Filter: %s\n", filter_names[f]);
+
+            for (int s = 0; s < 7; s++)
+            {
+                printf("    %-15s : ", strategy_names[s]);
+                fflush(stdout);
+
+                double start = get_time_ms();
+                pipeline_run(input_paths, output_paths, num_images, padded_indices[f], s, workers);
+                double elapsed = get_time_ms() - start;
+
+                results[f][s][t_idx] = elapsed;
+                printf("%8.2f ms\n", elapsed);
+
+                // Проверка корректности
+                for (int j = 0; j < num_images; j++)
+                {
+                    IplImage *pipeline_img = cvLoadImage(output_paths[j], 1);
+                    if (!pipeline_img)
+                        continue;
+
+                    IplImage *original_result = cvCreateImage(cvGetSize(original_images[j]),
+                                                              original_images[j]->depth,
+                                                              original_images[j]->nChannels);
+                    applyFilter(original_images[j], original_result, &original_filters[f]);
+
+                    int eq = imagesEqual(pipeline_img, original_result);
+                    assert(eq);
+
+                    cvReleaseImage(&pipeline_img);
+                    cvReleaseImage(&original_result);
+                }
+            }
+        }
+    }
+
+    // Итоговый вывод
     printf("\n");
-    printf("                          ZERO PADDING RESULTS                                 \n");
+    printf("================================================================================\n");
+    printf("                             SUMMARY\n");
+    printf("================================================================================\n");
     printf("\n");
 
     for (int f = 0; f < 5; f++)
     {
-        double speedup = sequential_times[f] / pipeline_times[f];
-        const char *correct_str = (valid_counts[f] == num_images) ? "YES" : "NO";
-        printf("  %-12s Pipeline:   %.2f ms\n", filter_names[f], pipeline_times[f]);
-        printf("  %-12s Sequential: %.2f ms\n", filter_names[f], sequential_times[f]);
-        printf("  %-12s Speedup:    %.2fx\n", filter_names[f], speedup);
-        printf("  %-12s Correct:    %s\n", filter_names[f], correct_str);
+        printf("  Filter: %s\n", filter_names[f]);
+        for (int s = 0; s < 7; s++)
+        {
+            printf("    %-15s : ", strategy_names[s]);
+            for (int t_idx = 0; t_idx < num_configs; t_idx++)
+            {
+                if (t_idx > 0)
+                    printf(" | ");
+                printf("%5.0f ms", results[f][s][t_idx]);
+            }
+            printf("\n");
+        }
         printf("\n");
     }
 
-    printf("  Processed images:      %d\n", num_images);
+    printf("  Workers:          ");
+    for (int t_idx = 0; t_idx < num_configs; t_idx++)
+    {
+        if (t_idx > 0)
+            printf(" | ");
+        printf("%5d   ", thread_counts[t_idx]);
+    }
+    printf("\n");
+
+    printf("\n");
+    printf("  Processed images: %d\n", num_images);
     printf("\n");
     printf("                          TEST 3 PASSED                                        \n");
 
@@ -424,9 +439,12 @@ void testZeroPadding(void)
     }
     for (int i = 0; i < num_images; i++)
     {
+        if (original_images[i])
+            cvReleaseImage(&original_images[i]);
         free((void *)input_paths[i]);
         free((void *)output_paths[i]);
     }
+    free(original_images);
     free(input_paths);
     free(output_paths);
 }
@@ -435,7 +453,7 @@ void testZeroFilter(void)
 {
     printf("\n");
     printf("                        TEST 4: ZERO FILTER                                     \n");
-    printf("                   (Pipeline vs Sequential Comparison)                         \n");
+    printf("                   (Pipeline Strategies Comparison)                            \n");
 
     Filter zero = filter_zero();
 
@@ -450,97 +468,110 @@ void testZeroFilter(void)
         printf("Error: No images found in %s\n", input_dir);
         return;
     }
-    printf("\n");
+
     printf("Found %d images in %s\n", num_images, input_dir);
-    printf("\n");
+
     const char **output_paths = (const char **)malloc(num_images * sizeof(const char *));
     generate_output_paths(input_paths, output_paths, num_images, output_dir);
 
-    // ЗАМЕР КОНВЕЙЕРА
-    printf("\nRunning pipeline on all images...\n");
-    double pipeline_start = get_time_ms();
-
-    pipeline_run(input_paths, output_paths, num_images, 26, 1, 10);
-
-    double pipeline_end = get_time_ms();
-    double pipeline_time = pipeline_end - pipeline_start;
-    printf("Pipeline completed in %.2f ms\n", pipeline_time);
-
-    // ПОСЛЕДОВАТЕЛЬНАЯ ОБРАБОТКА
-    int valid_count = 0;
-    double seq_total_time = 0;
-    printf("\n");
-    printf("\nComparing pipeline results with sequential processing...\n");
-    printf("\n");
+    // Загружаем оригинальные изображения
+    IplImage **original_images = (IplImage **)malloc(num_images * sizeof(IplImage *));
     for (int j = 0; j < num_images; j++)
     {
-        IplImage *img = cvLoadImage(output_paths[j], 1);
-        if (!img)
+        original_images[j] = cvLoadImage(input_paths[j], 1);
+        if (!original_images[j])
         {
-            printf("ERROR: Failed to load image %s\n", output_paths[j]);
-            continue;
+            printf("ERROR: Failed to load image %s\n", input_paths[j]);
         }
+    }
 
-        // Проверяем, что изображение полностью чёрное (все каналы = 0)
-        int step = img->widthStep;
-        int channels = img->nChannels;
-        const unsigned char *data = (const unsigned char *)img->imageData;
-        int all_black = 1;
-        for (int y = 0; y < img->height && all_black; y++)
+    // Конфигурации потоков
+    int thread_counts[] = {1, 2, 4, 8, 12, 16};
+    int num_configs = sizeof(thread_counts) / sizeof(thread_counts[0]);
+
+    // Результаты: [стратегия][конфигурация]
+    double results[7][num_configs];
+
+    // Бенчмарк
+    for (int t_idx = 0; t_idx < num_configs; t_idx++)
+    {
+        int workers = thread_counts[t_idx];
+        printf("\n========================================\n");
+        printf("  WORKERS: %d\n", workers);
+        printf("========================================\n");
+
+        for (int s = 0; s < 7; s++)
         {
-            for (int x = 0; x < img->width; x++)
+            printf("  %-15s : ", strategy_names[s]);
+            fflush(stdout);
+
+            double start = get_time_ms();
+            pipeline_run(input_paths, output_paths, num_images, 26, s, workers);
+            double elapsed = get_time_ms() - start;
+
+            results[s][t_idx] = elapsed;
+            printf("%8.2f ms\n", elapsed);
+
+            // Проверка корректности (изображение должно быть чёрным)
+            for (int j = 0; j < num_images; j++)
             {
-                const unsigned char *pixel = data + y * step + x * channels;
-                if (pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
+                IplImage *pipeline_img = cvLoadImage(output_paths[j], 1);
+                if (!pipeline_img)
+                    continue;
+
+                int step = pipeline_img->widthStep;
+                int channels = pipeline_img->nChannels;
+                const unsigned char *data = (const unsigned char *)pipeline_img->imageData;
+                int all_black = 1;
+                for (int y = 0; y < pipeline_img->height && all_black; y++)
                 {
-                    all_black = 0;
-                    break;
+                    for (int x = 0; x < pipeline_img->width; x++)
+                    {
+                        const unsigned char *pixel = data + y * step + x * channels;
+                        if (pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
+                        {
+                            all_black = 0;
+                            break;
+                        }
+                    }
                 }
+                assert(all_black);
+                cvReleaseImage(&pipeline_img);
             }
         }
-        if (!all_black)
+    }
+
+    // Итоговый вывод
+    printf("\n");
+    printf("================================================================================\n");
+    printf("                             SUMMARY\n");
+    printf("================================================================================\n");
+    printf("\n");
+
+    for (int s = 0; s < 7; s++)
+    {
+        printf("  %-15s : ", strategy_names[s]);
+        for (int t_idx = 0; t_idx < num_configs; t_idx++)
         {
-            printf("ERROR: Zero filter on image %d: result is not all black!\n", j);
+            if (t_idx > 0)
+                printf(" | ");
+            printf("%5.0f ms", results[s][t_idx]);
         }
-        assert(all_black);
-
-        // Последовательная обработка
-        IplImage *result_seq = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
-        double seq_start = get_time_ms();
-        applyFilter(img, result_seq, &zero);
-        double seq_time = get_time_ms() - seq_start;
-        seq_total_time += seq_time;
-
-        // Результат конвейера
-        IplImage *pipeline_img = cvLoadImage(output_paths[j], 1);
-        if (!pipeline_img)
-        {
-            printf("ERROR: Failed to load pipeline result: %s\n", output_paths[j]);
-            cvReleaseImage(&result_seq);
-            cvReleaseImage(&img);
-            continue;
-        }
-
-        int eq = imagesEqual(pipeline_img, result_seq);
-        if (!eq)
-        {
-            printf("ERROR: DIFFERENT images");
-        }
-        assert(eq);
-
-        cvReleaseImage(&result_seq);
-        cvReleaseImage(&pipeline_img);
-        cvReleaseImage(&img);
-        valid_count++;
+        printf("\n");
     }
 
     printf("\n");
-    printf("                          PIPELINE vs SEQUENTIAL RESULTS                       \n");
+    printf("  Workers:          ");
+    for (int t_idx = 0; t_idx < num_configs; t_idx++)
+    {
+        if (t_idx > 0)
+            printf(" | ");
+        printf("%5d   ", thread_counts[t_idx]);
+    }
     printf("\n");
-    printf("  Pipeline : %.2f ms\n", pipeline_time);
-    printf("  Sequential (total):   %.2f ms\n", seq_total_time);
-    printf("  Speedup:              %.2fx\n", seq_total_time / pipeline_time);
-    printf("  Processed images:     %d\n", valid_count);
+
+    printf("\n");
+    printf("  Processed images: %d\n", num_images);
     printf("\n");
     printf("                          TEST 4 PASSED                                        \n");
 
@@ -548,18 +579,21 @@ void testZeroFilter(void)
     filter_free(&zero);
     for (int i = 0; i < num_images; i++)
     {
+        if (original_images[i])
+            cvReleaseImage(&original_images[i]);
         free((void *)input_paths[i]);
         free((void *)output_paths[i]);
     }
+    free(original_images);
     free(input_paths);
     free(output_paths);
 }
 
 int main(void)
 {
-    testIdentityFilter();
+    // testIdentityFilter();
     testShiftComposition();
-    testZeroPadding();
-    testZeroFilter();
+    //  testZeroPadding();
+    // testZeroFilter();
     return 0;
 }

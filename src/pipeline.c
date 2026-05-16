@@ -63,23 +63,27 @@ static void *worker_func(void *arg)
     switch (strategy_id)
     {
     case 0:
-        apply_func = applyFilterParallelPixelwise;
+        apply_func = applyFilter;
         break;
     case 1:
-        apply_func = applyFilterParallelByRows;
+        apply_func = applyFilterParallelPixelwise;
         break;
     case 2:
-        apply_func = applyFilterParallelByCols;
+        apply_func = applyFilterParallelByRows;
         break;
     case 3:
-        apply_func = applyFilterParallelByBlocks32;
+        apply_func = applyFilterParallelByCols;
         break;
     case 4:
-        apply_func = applyFilterParallelByBlocks64;
+        apply_func = applyFilterParallelByBlocks32;
         break;
     case 5:
+        apply_func = applyFilterParallelByBlocks64;
+        break;
+    case 6:
         apply_func = applyFilterParallelByBlocks128;
         break;
+
     default:
         apply_func = applyFilterParallelByRows;
         break;
