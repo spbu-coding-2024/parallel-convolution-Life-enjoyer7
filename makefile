@@ -18,9 +18,9 @@ OPENCV_LIBS_MAIN = -L/usr/local/opencv3.4/lib \
 
 
 
-MAIN_PATH = src/main.c
+MAIN_PATH = src/main.c src/main_utils.c
 FILTER_PATH = src/filter.c
-TEST_PATH = tests/tests.c
+TEST_PATH = tests/tests.c tests/tests_utils.c
 BUILD_DIR = build
 NAME = filter
 NAME_TEST = tests
@@ -32,11 +32,11 @@ build: $(BUILD_DIR)/$(NAME)
 test: $(BUILD_DIR)/$(NAME_TEST)
 	export LD_LIBRARY_PATH=$(OPENCV_LIB_PATH):$$LD_LIBRARY_PATH && $(BUILD_DIR)/$(NAME_TEST)
 
-$(BUILD_DIR)/$(NAME): $(MAIN_PATH) $(FILTER_PATH)
+$(BUILD_DIR)/$(NAME): $(MAIN_PATH) src/main_utils.h $(FILTER_PATH)
 	mkdir -p $(BUILD_DIR)
 	$(CC) $(MAIN_PATH) $(FILTER_PATH) $(CFLAGS) $(INCLUDES) $(OPENCV_LIBS_MAIN)   -o $@
 
-$(BUILD_DIR)/$(NAME_TEST): $(TEST_PATH) $(FILTER_PATH)
+$(BUILD_DIR)/$(NAME_TEST): $(TEST_PATH) tests/tests_utils.h $(FILTER_PATH)
 	mkdir -p $(BUILD_DIR)
 	$(CC) $(TEST_PATH) $(FILTER_PATH) $(CFLAGS) $(INCLUDES) $(OPENCV_LIBS_TEST)   -o $@
 
