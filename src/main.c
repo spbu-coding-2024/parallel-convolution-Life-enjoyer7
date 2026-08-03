@@ -1,21 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
 #include <getopt.h>
 #include "filter.h"
+#include "main_utils.h"
 
 #ifndef CV_LOAD_IMAGE_COLOR
 #define CV_LOAD_IMAGE_COLOR 1
 #endif
 
 #define NUM_FILTERS 15
-
-double get_time_ms(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ts.tv_sec * 1000.0 + ts.tv_nsec / 1000000.0;
-}
+#define DEFAULT_REPEAT 10
 
 int main(int argc, char *argv[])
 {
@@ -23,6 +17,7 @@ int main(int argc, char *argv[])
     int strategyId = -1;
     char *load_path = NULL;
     char *save_path = NULL;
+    int repeat = DEFAULT_REPEAT;
 
     Filter filters[NUM_FILTERS];
     filters[0] = filter_blur3x3();
@@ -42,7 +37,7 @@ int main(int argc, char *argv[])
     filters[14] = filter_identity();
 
     // Только параллельные стратегии (без последовательной)
-    void (*strategies[6])(const IplImage *, IplImage *, const Filter *) = {
+    FilterFn strategies[6] = {
         applyFilterParallelPixelwise,  // 0 - попиксельно
         applyFilterParallelByRows,     // 1 - по строкам
         applyFilterParallelByCols,     // 2 - по столбцам
@@ -56,12 +51,13 @@ int main(int argc, char *argv[])
         {"tactic", required_argument, 0, 't'},
         {"src", required_argument, 0, 's'},
         {"out", required_argument, 0, 'o'},
+        {"repeat", required_argument, 0, 'r'},
         {0, 0, 0, 0}};
 
     int c;
     int option_index = 0;
 
-    while ((c = getopt_long(argc, argv, "f:t:s:o:", long_options, &option_index)) != -1)
+    while ((c = getopt_long(argc, argv, "f:t:s:o:r:", long_options, &option_index)) != -1)
     {
         switch (c)
         {
@@ -77,10 +73,19 @@ int main(int argc, char *argv[])
         case 'o':
             save_path = optarg;
             break;
+        case 'r':
+            repeat = atoi(optarg);
+            break;
         default:
             printf("Unknown option: %c\n", c);
             return 1;
         }
+    }
+
+    if (repeat < 1)
+    {
+        printf("Error: --repeat must be >= 1\n");
+        return 1;
     }
 
     if (filterId < 0 || filterId >= NUM_FILTERS)
@@ -123,15 +128,15 @@ int main(int argc, char *argv[])
 
     IplImage *result = cvCreateImage(cvGetSize(image), IPL_DEPTH_8U, 3);
 
-    printf("Applying filter %d with strategy %d...\n", filterId, strategyId);
+    printf("Applying filter %d with strategy %d (%d timed runs after warm-up)...\n", filterId, strategyId, repeat);
 
-    double start = get_time_ms();
-    strategies[strategyId](image, result, &filters[filterId]);
-    double end = get_time_ms();
+    double min_ms, mean_ms, median_ms;
+    benchmark_filter(strategies[strategyId], image, result, &filters[filterId], repeat, &min_ms, &mean_ms, &median_ms);
 
     printf("Saving to: '%s'\n", save_path);
     cvSaveImage(save_path, result);
-    printf("Completed with the time spent applying the filter equal to %8.2f ms\n", end - start);
+    printf("Time spent applying the filter: min=%8.2f ms  mean=%8.2f ms  median=%8.2f ms\n",
+           min_ms, mean_ms, median_ms);
 
     cvReleaseImage(&image);
     cvReleaseImage(&result);
