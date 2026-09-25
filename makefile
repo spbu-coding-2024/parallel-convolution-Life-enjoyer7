@@ -1,21 +1,22 @@
 CC = gcc
 CFLAGS = -std=gnu11 -Wall -g -O2
-INCLUDES = -I src -I/usr/local/opencv3.4/include
 
-OPENCV_LIBS_TEST = -L/usr/local/opencv3.4/lib \
-              -lopencv_highgui \
+
+OPENCV_PREFIX ?= /usr/local/opencv3.4
+INCLUDES = -I src -I$(OPENCV_PREFIX)/include
+
+OPENCV_LIBS_TEST = -L$(OPENCV_PREFIX)/lib \
               -lopencv_imgcodecs \
               -lopencv_imgproc \
               -lopencv_core \
               -lstdc++ -lm
 
-OPENCV_LIBS_MAIN = -L/usr/local/opencv3.4/lib \
-              -lopencv_highgui \
+OPENCV_LIBS_MAIN = -L$(OPENCV_PREFIX)/lib \
               -lopencv_imgcodecs \
               -lopencv_imgproc \
               -lopencv_core \
               -lstdc++ -lm \
-              -Wl,-rpath,/usr/local/opencv3.4/lib
+              -Wl,-rpath,$(OPENCV_PREFIX)/lib
 
 
 
@@ -27,7 +28,7 @@ BUILD_DIR = build
 NAME = filter
 NAME_TEST = tests
 
-OPENCV_LIB_PATH = /usr/local/opencv3.4/lib
+OPENCV_LIB_PATH = $(OPENCV_PREFIX)/lib
 
 build: $(BUILD_DIR)/$(NAME)
 
