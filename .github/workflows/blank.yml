@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [work_chur]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake git libjpeg-dev libpng-dev zlib1g-dev
+      - name: Cache OpenCV 3.4
+        id: opencv-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/opencv-install
+          key: opencv-3.4.20-${{ runner.os }}-${{ runner.arch }}-v1
+
+      - name: "Build OpenCV 3.4 (minimal: core, imgproc, imgcodecs)"
+        if: steps.opencv-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch 3.4.20 https://github.com/opencv/opencv.git "$RUNNER_TEMP/opencv-src"
+          cmake -S "$RUNNER_TEMP/opencv-src" -B "$RUNNER_TEMP/opencv-build" \
+            -D CMAKE_BUILD_TYPE=Release \
+            -D CMAKE_INSTALL_PREFIX="$RUNNER_TEMP/opencv-install" \
+            -D BUILD_LIST=core,imgproc,imgcodecs \
+            -D BUILD_SHARED_LIBS=ON \
+            -D BUILD_TESTS=OFF \
+            -D BUILD_PERF_TESTS=OFF \
+            -D BUILD_EXAMPLES=OFF \
+            -D BUILD_DOCS=OFF \
+            -D BUILD_opencv_python=OFF \
+            -D BUILD_opencv_java=OFF \
+            -D WITH_IPP=OFF \
+            -D WITH_TBB=OFF \
+            -D WITH_OPENMP=OFF
+          cmake --build "$RUNNER_TEMP/opencv-build" -j "$(nproc)"
+          cmake --install "$RUNNER_TEMP/opencv-build"
+      - name: Build
+        run: make build OPENCV_PREFIX="$RUNNER_TEMP/opencv-install"
+
+      - name: Run tests
+        run: make test OPENCV_PREFIX="$RUNNER_TEMP/opencv-install"
