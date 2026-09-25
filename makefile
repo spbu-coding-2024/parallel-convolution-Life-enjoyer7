@@ -1,5 +1,5 @@
-CC = g++
-CFLAGS = -Wall -g -O2
+CC = gcc
+CFLAGS = -std=gnu11 -Wall -g -O2
 INCLUDES = -I src -I/usr/local/opencv3.4/include
 
 OPENCV_LIBS_TEST = -L/usr/local/opencv3.4/lib \
@@ -7,12 +7,14 @@ OPENCV_LIBS_TEST = -L/usr/local/opencv3.4/lib \
               -lopencv_imgcodecs \
               -lopencv_imgproc \
               -lopencv_core \
+              -lstdc++ -lm
 
 OPENCV_LIBS_MAIN = -L/usr/local/opencv3.4/lib \
               -lopencv_highgui \
               -lopencv_imgcodecs \
               -lopencv_imgproc \
               -lopencv_core \
+              -lstdc++ -lm \
               -Wl,-rpath,/usr/local/opencv3.4/lib
 
 
@@ -20,7 +22,7 @@ OPENCV_LIBS_MAIN = -L/usr/local/opencv3.4/lib \
 
 MAIN_PATH = src/main.c src/main_utils.c
 FILTER_PATH = src/filter.c
-TEST_PATH = tests/tests.c tests/tests_utils.c
+TEST_PATH = tests/tests.c tests/tests_utils.c src/main_utils.c
 BUILD_DIR = build
 NAME = filter
 NAME_TEST = tests
@@ -36,7 +38,7 @@ $(BUILD_DIR)/$(NAME): $(MAIN_PATH) src/main_utils.h $(FILTER_PATH)
 	mkdir -p $(BUILD_DIR)
 	$(CC) $(MAIN_PATH) $(FILTER_PATH) $(CFLAGS) $(INCLUDES) $(OPENCV_LIBS_MAIN)   -o $@
 
-$(BUILD_DIR)/$(NAME_TEST): $(TEST_PATH) tests/tests_utils.h $(FILTER_PATH)
+$(BUILD_DIR)/$(NAME_TEST): $(TEST_PATH) tests/tests_utils.h src/main_utils.h $(FILTER_PATH)
 	mkdir -p $(BUILD_DIR)
 	$(CC) $(TEST_PATH) $(FILTER_PATH) $(CFLAGS) $(INCLUDES) $(OPENCV_LIBS_TEST)   -o $@
 

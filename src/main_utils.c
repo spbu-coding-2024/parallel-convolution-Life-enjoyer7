@@ -9,7 +9,7 @@ double get_time_ms(void)
     return ts.tv_sec * 1000.0 + ts.tv_nsec / 1000000.0;
 }
 
-static int compare_double(const void *a, const void *b)
+int compare_double(const void *a, const void *b)
 {
     double da = *(const double *)a;
     double db = *(const double *)b;
@@ -21,7 +21,7 @@ void benchmark_filter(const IplImage *src, IplImage *dst, const Filter *f, int r
 {
     applyFilter(src, dst, f);
 
-    double *samples = (double *)malloc(repeat * sizeof(double));
+    double *samples = malloc(repeat * sizeof(double));
     double sum = 0.0;
     for (int i = 0; i < repeat; i++)
     {

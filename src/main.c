@@ -8,7 +8,6 @@
 #define CV_LOAD_IMAGE_COLOR 1
 #endif
 
-#define NUM_FILTERS 15
 #define DEFAULT_REPEAT 10
 
 int main(int argc, char *argv[])
@@ -18,24 +17,7 @@ int main(int argc, char *argv[])
     char *save_path = NULL;
     int repeat = DEFAULT_REPEAT;
 
-    Filter filters[NUM_FILTERS];
-    filters[0] = filter_blur3x3();
-    filters[1] = filter_blur5x5();
-    filters[2] = filter_gaussian3x3();
-    filters[3] = filter_gaussian5x5();
-    filters[4] = filter_motionblur();
-    filters[5] = filter_findedges1();
-    filters[6] = filter_findedges2();
-    filters[7] = filter_findedges3();
-    filters[8] = filter_findedges4();
-    filters[9] = filter_sharpen1();
-    filters[10] = filter_sharpen2();
-    filters[11] = filter_sharpen3();
-    filters[12] = filter_emboss1();
-    filters[13] = filter_emboss2();
-    filters[14] = filter_identity();
-
-    static struct option long_options[] = {
+    struct option long_options[] = {
         {"filter", required_argument, 0, 'f'},
         {"src", required_argument, 0, 's'},
         {"out", required_argument, 0, 'o'},
@@ -101,22 +83,20 @@ int main(int argc, char *argv[])
 
     IplImage *result = cvCreateImage(cvGetSize(image), IPL_DEPTH_8U, 3);
 
+    Filter filter = filter_by_id(filterId);
     printf("Applying filter %d (%d timed runs after warm-up)...\n", filterId, repeat);
 
     double min_ms, mean_ms, median_ms;
-    benchmark_filter(image, result, &filters[filterId], repeat, &min_ms, &mean_ms, &median_ms);
+    benchmark_filter(image, result, &filter, repeat, &min_ms, &mean_ms, &median_ms);
 
     printf("Saving to: '%s'\n", save_path);
-    cvSaveImage(save_path, result);
+    cvSaveImage(save_path, result, 0);
     printf("Time spent applying the filter: min=%8.2f ms  mean=%8.2f ms  median=%8.2f ms\n",
            min_ms, mean_ms, median_ms);
 
     cvReleaseImage(&image);
     cvReleaseImage(&result);
-    for (int i = 0; i < NUM_FILTERS; i++)
-    {
-        filter_free(&filters[i]);
-    }
+    filter_free(&filter);
 
     return 0;
 }

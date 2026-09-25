@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-// C++ Mat API - нужен только для referenceApplyFilter (сверка с OpenCV как эталоном).
-#include <opencv2/core.hpp>
-#include <opencv2/imgproc.hpp>
 #include "tests_utils.h"
+#include "../src/main_utils.h"
+
+int g_test_failures = 0;
 
 const char *imagePaths[15] = {
     "images/bugatti_1200x600.jpg",
@@ -40,17 +40,10 @@ const char *imageNames[15] = {
     "bugatti_big_size.jpg",
     "car_1200x687.jpeg"};
 
-double get_time_ms(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ts.tv_sec * 1000.0 + ts.tv_nsec / 1000000.0;
-}
-
 #define BENCH_REPEAT 3
 
-// Один непрогретый прогон отбрасывается, дальше усредняем по BENCH_REPEAT прогонам,
-// т.к. один-единственный замер слишком шумный для сравнения между картинками/фильтрами.
+
+
 double timeFilterMs(const IplImage *src, IplImage *dst, const Filter *f)
 {
     applyFilter(src, dst, f);
@@ -66,8 +59,8 @@ double timeFilterMs(const IplImage *src, IplImage *dst, const Filter *f)
     return total / BENCH_REPEAT;
 }
 
-// То же самое, но для пары фильтров, применяемых одна за другой (композиция
-// или сравнение "оригинал vs paddded" - время меряется суммарно на обе).
+
+
 double timeTwoFiltersMs(const IplImage *srcA, IplImage *dstA, const Filter *fA,
                         const IplImage *srcB, IplImage *dstB, const Filter *fB)
 {
@@ -109,8 +102,8 @@ int imagesEqual(const IplImage *a, const IplImage *b)
     return 1;
 }
 
-// Сравнение с допуском: возвращает 1, если максимальное отклонение канала
-// не превышает tolerance. max_diff_out (может быть NULL) получает фактический максимум.
+
+
 int imagesApproxEqual(const IplImage *a, const IplImage *b, int tolerance, int *max_diff_out)
 {
     if (a->width != b->width || a->height != b->height || a->nChannels != b->nChannels)
@@ -165,15 +158,15 @@ IplImage *createRandomImage(int w, int h)
     return img;
 }
 
-// Случайный нечётный размер от 1 до maxSize включительно
+
 int randomOddSize(int maxSize)
 {
-    int halfCount = (maxSize + 1) / 2; // сколько нечётных чисел в [1, maxSize]
+    int halfCount = (maxSize + 1) / 2;
     return 2 * (rand() % halfCount) + 1;
 }
 
-// Небольшая картинка: часть прогонов явно бьёт по крайним случаям (1x1, 2x2, 3x3),
-// остальные — случайный размер из достаточно широкого диапазона.
+
+
 int randomImageDim(void)
 {
     int r = rand() % 10;
@@ -186,12 +179,12 @@ int randomImageDim(void)
     return 4 + rand() % 40;
 }
 
-// Случайный фильтр-"выпуклая комбинация": неотрицательные веса, сумма == 1,
-// factor=1, bias=0. Такой фильтр — взвешенное усреднение соседних пикселей,
-// поэтому результат применения гарантированно остаётся в [0,255] без насыщения
+
+
+
 Filter randomConvexFilter(int w, int h)
 {
-    double *data = (double *)malloc(w * h * sizeof(double));
+    double *data = malloc(w * h * sizeof(double));
     double sum = 0.0;
     for (int i = 0; i < w * h; i++)
     {
@@ -213,17 +206,17 @@ Filter randomConvexFilter(int w, int h)
     return f;
 }
 
-// "Объединяет" два фильтра A, B (bias=0) в один фильтр
-//  Это обычная (не циклическая) свёртка ядер A и B: смещения от
-// центра у correlate(x - w/2 + fx) складываются линейно, а поскольку A и B
-// оба нечётного размера, (wA/2 + wB/2) == (wA+wB-1)/2 и центрирование
-// результата совпадает с тем, как applyFilter центрирует фильтр размера
-// (wA+wB-1) x (hA+hB-1).
+
+
+
+
+
+
 Filter composeKernels(const Filter *a, const Filter *b)
 {
     int cw = a->width + b->width - 1;
     int ch = a->height + b->height - 1;
-    double *data = (double *)calloc(cw * ch, sizeof(double));
+    double *data = calloc(cw * ch, sizeof(double));
 
     for (int ay = 0; ay < a->height; ay++)
         for (int ax = 0; ax < a->width; ax++)
@@ -236,53 +229,58 @@ Filter composeKernels(const Filter *a, const Filter *b)
     return c;
 }
 
-// cv::filter2D сам не поддерживает BORDER_WRAP ("BORDER_WRAP is not supported"
-// в документации OpenCV), поэтому картинка вручную дополняется по кругу через
-// cv::copyMakeBorder(..., BORDER_WRAP) на половину размера фильтра с каждой
-// стороны (как и applyFilter, filter.width/height нечётные => отступ
-// симметричный), после чего вырезается центральная область того же размера,
-// что и исходное изображение. Итоговый clamp+truncate делаем сами по double,
-// а не через встроенную конвертацию OpenCV в 8U - у неё round(), а у нас
-// truncate(), эти два округления дают разные результаты почти на половине
-// пикселей, что не имеет отношения к тому, что мы проверяем.
+
+
+
+
+
+
+
 IplImage *referenceApplyFilter(const IplImage *src, const Filter *f)
 {
-    cv::Mat srcMat = cv::cvarrToMat(src);        // Преобразует IplImage* (C API) в cv::Mat (C++ API)
-    cv::Mat kernel(f->height, f->width, CV_64F); // Создаёт матрицу ядра фильтра
-    for (int y = 0; y < f->height; y++)
-        for (int x = 0; x < f->width; x++)
-            kernel.at<double>(y, x) = f->matrix[y][x] * f->factor;
-
     int padW = f->width / 2;
     int padH = f->height / 2;
 
-    cv::Mat padded;
-    cv::copyMakeBorder(srcMat, padded, padH, padH, padW, padW, cv::BORDER_WRAP); // Добавляет границы с зацикливанием (BORDER_WRAP)
 
-    cv::Mat filtered64;
-    cv::filter2D(padded, filtered64, CV_64F, kernel, cv::Point(-1, -1), f->bias, cv::BORDER_CONSTANT);
+    CvMat *kernel = cvCreateMat(f->height, f->width, CV_64FC1);
+    for (int y = 0; y < f->height; y++)
+        for (int x = 0; x < f->width; x++)
+            cvmSet(kernel, y, x, f->matrix[y][x] * f->factor);
 
-    cv::Mat cropped = filtered64(cv::Rect(padW, padH, src->width, src->height)); // cv::Rect() - Определяет прямоугольную область для вырезания
 
-    IplImage *result = cvCreateImage(cvGetSize(src), IPL_DEPTH_8U, 3);
+    IplImage *padded = cvCreateImage(cvSize(src->width + 2 * padW, src->height + 2 * padH),
+                                     IPL_DEPTH_8U, src->nChannels);
+    cvCopyMakeBorder(src, padded, cvPoint(padW, padH), IPL_BORDER_WRAP, cvScalarAll(0));
+
+
+    IplImage *filtered64 = cvCreateImage(cvGetSize(padded), IPL_DEPTH_64F, src->nChannels);
+    cvFilter2D(padded, filtered64, kernel, cvPoint(-1, -1));
+
+
+    IplImage *result = cvCreateImage(cvGetSize(src), IPL_DEPTH_8U, src->nChannels);
     int step = result->widthStep;
-    int channels = result->nChannels;
+    int channels = src->nChannels;
+    const double *fdata = (const double *)filtered64->imageData;
+    int fstep = filtered64->widthStep / (int)sizeof(double);
     unsigned char *dst_data = (unsigned char *)result->imageData;
 
     for (int y = 0; y < src->height; y++)
     {
         for (int x = 0; x < src->width; x++)
         {
-            const cv::Vec3d &px = cropped.at<cv::Vec3d>(y, x);
             unsigned char *out = dst_data + y * step + x * channels;
-            for (int c = 0; c < 3; c++)
+            for (int c = 0; c < channels; c++)
             {
-                int v = (int)px[c];
+                double val = fdata[(y + padH) * fstep + (x + padW) * channels + c] + f->bias;
+                int v = (int)val;
                 v = v < 0 ? 0 : (v > 255 ? 255 : v);
                 out[c] = (unsigned char)v;
             }
         }
     }
 
+    cvReleaseMat(&kernel);
+    cvReleaseImage(&padded);
+    cvReleaseImage(&filtered64);
     return result;
 }

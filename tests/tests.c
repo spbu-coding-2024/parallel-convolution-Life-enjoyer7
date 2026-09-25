@@ -1,4 +1,3 @@
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -25,13 +24,13 @@ void testIdentityFilter(void)
         IplImage *result = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
         times[valid_count] = timeFilterMs(img, result, &identity);
 
-        // Проверка: identity фильтр не должен изменять изображение
+
         int eq = imagesEqual(img, result);
         if (!eq)
         {
             printf("Results do not match original for image %d!\n", j);
         }
-        assert(eq);
+        CHECK(eq);
 
         cvReleaseImage(&result);
         cvReleaseImage(&img);
@@ -46,7 +45,7 @@ void testIdentityFilter(void)
         total += times[i];
     }
     printf("\n  Total: %8.2f ms\n", total);
-    printf("\n                                        TEST 1 PASSED\n");
+
     filter_free(&identity);
 }
 
@@ -55,15 +54,15 @@ void testShiftComposition(void)
     printf("\n");
     printf("                                        TEST 2: SHIFT COMPOSITION                         \n");
 
-    double times[3][15] = {0}; // 3 композиции: RightLeft, UpDown, Diag
+    double times[3][15] = {0};
     int valid_count = 0;
 
-    double kernel_right[3][3] = {{0, 0, 0}, {1, 0, 0}, {0, 0, 0}};
-    double kernel_left[3][3] = {{0, 0, 0}, {0, 0, 1}, {0, 0, 0}};
-    double kernel_up[3][3] = {{0, 0, 0}, {0, 0, 0}, {0, 1, 0}};
-    double kernel_down[3][3] = {{0, 1, 0}, {0, 0, 0}, {0, 0, 0}};
-    double kernel_diag_up[3][3] = {{0, 0, 0}, {0, 0, 0}, {1, 0, 0}};
-    double kernel_diag_down[3][3] = {{0, 0, 1}, {0, 0, 0}, {0, 0, 0}};
+    const double kernel_right[3][3] = {{0, 0, 0}, {1, 0, 0}, {0, 0, 0}};
+    const double kernel_left[3][3] = {{0, 0, 0}, {0, 0, 1}, {0, 0, 0}};
+    const double kernel_up[3][3] = {{0, 0, 0}, {0, 0, 0}, {0, 1, 0}};
+    const double kernel_down[3][3] = {{0, 1, 0}, {0, 0, 0}, {0, 0, 0}};
+    const double kernel_diag_up[3][3] = {{0, 0, 0}, {0, 0, 0}, {1, 0, 0}};
+    const double kernel_diag_down[3][3] = {{0, 0, 1}, {0, 0, 0}, {0, 0, 0}};
 
     Filter shiftRight = filter_create(3, 3, &kernel_right[0][0], 1.0, 0.0);
     Filter shiftLeft = filter_create(3, 3, &kernel_left[0][0], 1.0, 0.0);
@@ -81,36 +80,36 @@ void testShiftComposition(void)
             continue;
         }
 
-        // Right-Left
+
         IplImage *temp = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
         IplImage *final = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
         times[0][valid_count] = timeTwoFiltersMs(img, temp, &shiftRight, temp, final, &shiftLeft);
         int eq = imagesEqual(img, final);
         if (!eq)
             printf("Right-Left composition failed for image %d\n", i);
-        assert(eq);
+        CHECK(eq);
         cvReleaseImage(&temp);
         cvReleaseImage(&final);
 
-        // Up-Down
+
         temp = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
         final = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
         times[1][valid_count] = timeTwoFiltersMs(img, temp, &shiftUp, temp, final, &shiftDown);
         eq = imagesEqual(img, final);
         if (!eq)
             printf("Up-Down composition failed for image %d\n", i);
-        assert(eq);
+        CHECK(eq);
         cvReleaseImage(&temp);
         cvReleaseImage(&final);
 
-        // Diag
+
         temp = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
         final = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
         times[2][valid_count] = timeTwoFiltersMs(img, temp, &shiftDiagUp, temp, final, &shiftDiagDown);
         eq = imagesEqual(img, final);
         if (!eq)
             printf("Diag composition failed for image %d\n", i);
-        assert(eq);
+        CHECK(eq);
         cvReleaseImage(&temp);
         cvReleaseImage(&final);
 
@@ -142,7 +141,7 @@ void testShiftComposition(void)
         printf("  %8.2f ms  for  %s\n", times[2][i], imageNames[i]);
     }
 
-    printf("\n                                        TEST 2 PASSED\n");
+
 }
 
 void testZeroPadding(void)
@@ -150,7 +149,7 @@ void testZeroPadding(void)
     printf("\n");
     printf("                                        TEST 3: ZERO PADDING                                         \n");
 
-    double times[5][15] = {0}; // 5 фильтров
+    double times[5][15] = {0};
     int valid_count = 0;
 
     Filter original_filters[5];
@@ -160,21 +159,21 @@ void testZeroPadding(void)
     original_filters[3] = filter_sharpen1();
     original_filters[4] = filter_emboss1();
 
-    double kernel_blur_padded[5][5] = {
+    const double kernel_blur_padded[5][5] = {
         {0, 0, 0, 0, 0},
         {0, 0, 0.2, 0, 0},
         {0, 0.2, 0.2, 0.2, 0},
         {0, 0, 0.2, 0, 0},
         {0, 0, 0, 0, 0}};
 
-    double kernel_gauss_padded[5][5] = {
+    const double kernel_gauss_padded[5][5] = {
         {0, 0, 0, 0, 0},
         {0, 1, 2, 1, 0},
         {0, 2, 4, 2, 0},
         {0, 1, 2, 1, 0},
         {0, 0, 0, 0, 0}};
 
-    double kernel_edges_padded[7][7] = {
+    const double kernel_edges_padded[7][7] = {
         {0, 0, 0, 0, 0, 0, 0},
         {0, 0, 0, -1, 0, 0, 0},
         {0, 0, 0, -1, 0, 0, 0},
@@ -183,14 +182,14 @@ void testZeroPadding(void)
         {0, 0, 0, 0, 0, 0, 0},
         {0, 0, 0, 0, 0, 0, 0}};
 
-    double kernel_sharpen_padded[5][5] = {
+    const double kernel_sharpen_padded[5][5] = {
         {0, 0, 0, 0, 0},
         {0, -1, -1, -1, 0},
         {0, -1, 9, -1, 0},
         {0, -1, -1, -1, 0},
         {0, 0, 0, 0, 0}};
 
-    double kernel_emboss_padded[5][5] = {
+    const double kernel_emboss_padded[5][5] = {
         {0, 0, 0, 0, 0},
         {0, -1, -1, 0, 0},
         {0, -1, 0, 1, 0},
@@ -228,7 +227,7 @@ void testZeroPadding(void)
             {
                 printf("ERROR: Filter %s on image %d: results do not match!\n", filter_names[j], i);
             }
-            assert(eq);
+            CHECK(eq);
 
             cvReleaseImage(&result_orig);
             cvReleaseImage(&result_padded);
@@ -255,7 +254,7 @@ void testZeroPadding(void)
         printf("\n");
     }
 
-    printf("\n                                        TEST 3 PASSED\n");
+
 }
 
 void testZeroFilter(void)
@@ -266,7 +265,7 @@ void testZeroFilter(void)
     double times[15] = {0};
     int valid_count = 0;
 
-    double kernel_zero[3][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
+    const double kernel_zero[3][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
     Filter zero_filter = filter_create(3, 3, &kernel_zero[0][0], 1.0, 0.0);
 
     for (int i = 0; i < 15; i++)
@@ -281,7 +280,7 @@ void testZeroFilter(void)
         IplImage *result = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
         times[valid_count] = timeFilterMs(img, result, &zero_filter);
 
-        // Проверка: все пиксели должны быть чёрными (0,0,0)
+
         int step = result->widthStep;
         int channels = result->nChannels;
         const unsigned char *data = (const unsigned char *)result->imageData;
@@ -302,7 +301,7 @@ void testZeroFilter(void)
         {
             printf("ERROR: Zero filter on image %d: result is not all black!\n", i);
         }
-        assert(all_black);
+        CHECK(all_black);
 
         cvReleaseImage(&result);
         cvReleaseImage(&img);
@@ -317,14 +316,14 @@ void testZeroFilter(void)
         printf("  %8.2f ms  for  %s\n", times[i], imageNames[i]);
     }
 
-    printf("\n                                        TEST 4 PASSED\n");
+
 }
 
-// TEST 5: property-based тесты на случайных данных
 
-// В отличие от тестов 1-4 (фиксированные 15 реальных фотографий), здесь и
-// изображения, и фильтры генерируются случайно, с широким разбросом размеров,
-// включая крайние случаи (1x1 картинка, фильтр 1x1, фильтр крупнее картинки).
+
+
+
+
 
 void testRandomizedProperties(void)
 {
@@ -336,11 +335,11 @@ void testRandomizedProperties(void)
     srand(seed);
 
     const int TRIALS = 30;
-    // Допуск для теста композиции: между двумя последовательными applyFilter
-    // результат первого прохода округляется double -> uint8, а однопроходный
-    // composed-фильтр этого промежуточного округления не делает. Разница
-    // ограничена (сумма весов A и B по отдельности <= 1), эмпирически не
-    // превышает 1-2 градации яркости.
+
+
+
+
+
     const int COMPOSITION_TOLERANCE = 2;
 
     Filter identity = filter_identity();
@@ -352,17 +351,17 @@ void testRandomizedProperties(void)
         int h = randomImageDim();
         IplImage *img = createRandomImage(w, h);
 
-        // (iv) identity не меняет изображение — при случайном размере картинки
+
         IplImage *idOut = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
         double tId = timeFilterMs(img, idOut, &identity);
         printf("  trial %2d | img %2dx%-2d | %-9s %2dx%-2d          | %9.4f ms\n", t, w, h, "identity", 3, 3, tId);
-        assert(imagesEqual(img, idOut));
+        CHECK(imagesEqual(img, idOut));
         cvReleaseImage(&idOut);
 
-        // (iv) нулевой фильтр случайного нечётного размера -> чёрное изображение
+
         int zw = randomOddSize(w);
         int zh = randomOddSize(h);
-        double *zeroData = (double *)calloc(zw * zh, sizeof(double));
+        double *zeroData = calloc(zw * zh, sizeof(double));
         Filter zeroFilter = filter_create(zw, zh, zeroData, 1.0, 0.0);
         free(zeroData);
 
@@ -383,22 +382,22 @@ void testRandomizedProperties(void)
                         break;
                     }
                 }
-            assert(all_black);
+            CHECK(all_black);
         }
         cvReleaseImage(&zeroOut);
         filter_free(&zeroFilter);
 
-        // (iii) расширение случайного фильтра кольцом нулей не меняет результат
+
         int pw = randomOddSize(w);
         int ph = randomOddSize(h);
-        double *baseData = (double *)malloc(pw * ph * sizeof(double));
+        double *baseData = malloc(pw * ph * sizeof(double));
         for (int i = 0; i < pw * ph; i++)
-            baseData[i] = (double)(rand() % 5) - 2; // случайные веса в [-2, 2]
+            baseData[i] = (double)(rand() % 5) - 2;
         Filter base = filter_create(pw, ph, baseData, 1.0, 0.0);
         free(baseData);
 
         int padW = pw + 2, padH = ph + 2;
-        double *paddedData = (double *)calloc(padW * padH, sizeof(double));
+        double *paddedData = calloc(padW * padH, sizeof(double));
         for (int y = 0; y < ph; y++)
             for (int x = 0; x < pw; x++)
                 paddedData[(y + 1) * padW + (x + 1)] = base.matrix[y][x];
@@ -410,13 +409,13 @@ void testRandomizedProperties(void)
         double tPad = timeTwoFiltersMs(img, baseOut, &base, img, paddedOut, &padded);
         printf("  trial %2d | img %2dx%-2d | %-9s %2dx%-2d -> %2dx%-2d | %9.4f ms\n",
                t, w, h, "pad", pw, ph, padW, padH, tPad);
-        assert(imagesEqual(baseOut, paddedOut));
+        CHECK(imagesEqual(baseOut, paddedOut));
         cvReleaseImage(&baseOut);
         cvReleaseImage(&paddedOut);
         filter_free(&base);
         filter_free(&padded);
 
-        // (i) применение двух случайных фильтров подряд == один проход с их композицией..
+
         int aw = randomOddSize(w), ah = randomOddSize(h);
         int bw = randomOddSize(w), bh = randomOddSize(h);
         Filter fa = randomConvexFilter(aw, ah);
@@ -444,7 +443,7 @@ void testRandomizedProperties(void)
                    t, w, h, aw, ah, bw, bh, diff);
             fflush(stdout);
         }
-        assert(ok);
+        CHECK(ok);
 
         cvReleaseImage(&mid);
         cvReleaseImage(&sequential);
@@ -460,43 +459,22 @@ void testRandomizedProperties(void)
 
     printf("  max observed diff between sequential and composed-kernel pass: %d (tolerance %d)\n",
            max_diff_seen, COMPOSITION_TOLERANCE);
-    printf("\n                                        TEST 5 PASSED (%d random trials)\n", TRIALS);
+
 }
 
-// TEST 6: сверка с эталонной библиотекой (OpenCV cv::filter2D через
-// referenceApplyFilter из tests_utils)
+
+
 
 void testReferenceLibrary(void)
 {
     printf("\n");
     printf("                                        TEST 6: REFERENCE LIBRARY (OpenCV filter2D)\n");
 
-    // Пара маленьких + пара больших картинок - чтобы не гонять cv::filter2D
+
     const int imageIdx[] = {6, 3, 9, 5, 8};
     const int numImages = 5;
 
-    Filter filters[15];
-    const char *filterNames[15] = {
-        "blur3x3", "blur5x5", "gaussian3x3", "gaussian5x5", "motionblur",
-        "findedges1", "findedges2", "findedges3", "findedges4",
-        "sharpen1", "sharpen2", "sharpen3", "emboss1", "emboss2", "identity"};
-    filters[0] = filter_blur3x3();
-    filters[1] = filter_blur5x5();
-    filters[2] = filter_gaussian3x3();
-    filters[3] = filter_gaussian5x5();
-    filters[4] = filter_motionblur();
-    filters[5] = filter_findedges1();
-    filters[6] = filter_findedges2();
-    filters[7] = filter_findedges3();
-    filters[8] = filter_findedges4();
-    filters[9] = filter_sharpen1();
-    filters[10] = filter_sharpen2();
-    filters[11] = filter_sharpen3();
-    filters[12] = filter_emboss1();
-    filters[13] = filter_emboss2();
-    filters[14] = filter_identity();
-
-    const int TOLERANCE = 1; // запас на порядок суммирования double, см. referenceApplyFilter
+    const int TOLERANCE = 1;
     int max_diff_seen = 0;
     int mismatches = 0;
 
@@ -510,12 +488,14 @@ void testReferenceLibrary(void)
             continue;
         }
 
-        for (int j = 0; j < 15; j++)
+        for (int j = 0; j < NUM_FILTERS; j++)
         {
-            IplImage *ours = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
-            double t = timeFilterMs(img, ours, &filters[j]);
+            Filter f = filter_by_id(j);
 
-            IplImage *reference = referenceApplyFilter(img, &filters[j]);
+            IplImage *ours = cvCreateImage(cvGetSize(img), img->depth, img->nChannels);
+            double t = timeFilterMs(img, ours, &f);
+
+            IplImage *reference = referenceApplyFilter(img, &f);
 
             int diff = 0;
             int ok = imagesApproxEqual(ours, reference, TOLERANCE, &diff);
@@ -524,37 +504,42 @@ void testReferenceLibrary(void)
             if (!ok)
             {
                 mismatches++;
-                printf("  MISMATCH: %s / %s, max diff %d\n", imageNames[idx], filterNames[j], diff);
+                printf("  MISMATCH: %s / %s, max diff %d\n", imageNames[idx], filter_name(j), diff);
             }
-            assert(ok);
+            CHECK(ok);
 
             printf("  %-22s | %-12s %2dx%-2d | img %4dx%-4d | %8.4f ms\n",
-                   imageNames[idx], filterNames[j], filters[j].width, filters[j].height,
+                   imageNames[idx], filter_name(j), f.width, f.height,
                    img->width, img->height, t);
 
             cvReleaseImage(&ours);
             cvReleaseImage(&reference);
+            filter_free(&f);
         }
 
         cvReleaseImage(&img);
-        printf("  %s vs cv::filter2D: OK (all %d filters)\n\n", imageNames[idx], 15);
+        printf("  %s vs cvFilter2D: OK (all %d filters)\n\n", imageNames[idx], NUM_FILTERS);
     }
-
-    for (int j = 0; j < 15; j++)
-        filter_free(&filters[j]);
 
     printf("  max observed diff vs OpenCV: %d (tolerance %d), mismatches: %d\n",
            max_diff_seen, TOLERANCE, mismatches);
-    printf("\n                                        TEST 6 PASSED\n");
+
 }
 
 int main(void)
 {
-    testIdentityFilter();
-    testShiftComposition();
-    testZeroPadding();
-    testZeroFilter();
-    testRandomizedProperties();
-    testReferenceLibrary();
-    return 0;
+    RUN_TEST(testIdentityFilter, "TEST 1: IDENTITY FILTER");
+    RUN_TEST(testShiftComposition, "TEST 2: SHIFT COMPOSITION");
+    RUN_TEST(testZeroPadding, "TEST 3: ZERO PADDING");
+    RUN_TEST(testZeroFilter, "TEST 4: ZERO FILTER");
+    RUN_TEST(testRandomizedProperties, "TEST 5: RANDOMIZED PROPERTIES");
+    RUN_TEST(testReferenceLibrary, "TEST 6: REFERENCE LIBRARY");
+
+    if (g_test_failures == 0)
+    {
+        printf("\n                                        ALL TESTS PASSED\n");
+        return 0;
+    }
+    printf("\n                                        TOTAL: %d FAILURE(S)\n", g_test_failures);
+    return 1;
 }
