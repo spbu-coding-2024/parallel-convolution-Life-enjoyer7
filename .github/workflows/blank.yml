@@ -27,7 +27,7 @@ jobs:
           path: ${{ runner.temp }}/opencv-install
           key: opencv-3.4.20-${{ runner.os }}-${{ runner.arch }}-v1
 
-      - name: Build OpenCV 3.4 (minimal: core, imgproc, imgcodecs)
+      - name: "Build OpenCV 3.4 (minimal: core, imgproc, imgcodecs)"
         if: steps.opencv-cache.outputs.cache-hit != 'true'
         run: |
           git clone --depth 1 --branch 3.4.20 https://github.com/opencv/opencv.git "$RUNNER_TEMP/opencv-src"
